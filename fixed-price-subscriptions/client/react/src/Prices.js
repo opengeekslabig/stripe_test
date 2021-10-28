@@ -5,27 +5,47 @@ import { Redirect } from 'react-router-dom';
 const Prices = () => {
   const [prices, setPrices] = useState([]);
   const [subscriptionData, setSubscriptionData] = useState(null);
+  const [currentSubscription, setCurrentSubscription] = useState([]);
 
   useEffect(() => {
     const fetchPrices = async () => {
       const {prices} = await fetch('/config').then(r => r.json());
       setPrices(prices);
     };
+    const fetchSubscriptions = async () => {
+      const {subscriptions} = await fetch('/subscriptions').then(r => r.json());
+      setCurrentSubscription(subscriptions.data.find(item=>item.status==='active'));
+    };
     fetchPrices();
+    fetchSubscriptions();
   }, [])
 
   const createSubscription = async (priceId) => {
-    const {subscriptionId, clientSecret} = await fetch('/create-subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        priceId
-      }),
-    }).then(r => r.json());
+    if(currentSubscription){
+      const {subscription} = await fetch('/update-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subscriptionId: currentSubscription.id,
+          priceId
+        }),
+      }).then(r => r.json());
+      console.log('update',subscription);
+    } else {
+      const {subscriptionId, clientSecret} = await fetch('/create-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          priceId
+        }),
+      }).then(r => r.json());
 
-    setSubscriptionData({ subscriptionId, clientSecret });
+      setSubscriptionData({ subscriptionId, clientSecret });
+    }
   }
 
   if(subscriptionData) {
@@ -38,7 +58,6 @@ const Prices = () => {
   return (
     <div>
       <h1>Select a plan</h1>
-
       <div className="price-list">
         {prices.map((price) => {
           return (
@@ -55,6 +74,10 @@ const Prices = () => {
             </div>
           )
         })}
+      </div>
+      <p>current plan</p>
+      <div>
+        <p >{currentSubscription?.plan?.nickname}</p>
       </div>
     </div>
   );

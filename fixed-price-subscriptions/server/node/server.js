@@ -63,8 +63,8 @@ app.get('/', (req, res) => {
 
 app.get('/config', async (req, res) => {
   const prices = await stripe.prices.list({
-    lookup_keys: ['sample_basic', 'sample_premium'],
-    expand: ['data.product']
+    // lookup_keys: ['sample_basic', 'sample_premium'],
+    // expand: ['data.product']
   });
 
   res.send({
@@ -75,10 +75,18 @@ app.get('/config', async (req, res) => {
 
 app.post('/create-customer', async (req, res) => {
   // Create a new customer object
-  const customer = await stripe.customers.create({
+  let customer
+  const customers = await stripe.customers.list({
     email: req.body.email,
   });
 
+  if(customers.data.length>0){
+    customer = customers.data.find(item=>item.email===req.body.email);
+  } else {
+    customer = await stripe.customers.create({
+      email: req.body.email,
+    });
+  }
   // Save the customer.id in your database alongside your user.
   // We're simulating authentication with a cookie.
   res.cookie('customer', customer.id, { maxAge: 900000, httpOnly: true });
@@ -151,11 +159,22 @@ app.post('/update-subscription', async (req, res) => {
     const subscription = await stripe.subscriptions.retrieve(
       req.body.subscriptionId
     );
+
+    if(subscription.plan.id===req.body.priceId){
+      return res.status(400).json({ error: 'is current' });
+    }
+
+    // return res.send({ subscription: subscription });
+    // const deletedSubscription = await stripe.subscriptions.del(
+    //     req.body.subscriptionId
+    // );
     const updatedSubscription = await stripe.subscriptions.update(
       req.body.subscriptionId, {
+          payment_behavior: 'pending_if_incomplete',
+          proration_behavior: 'always_invoice',
         items: [{
           id: subscription.items.data[0].id,
-          price: process.env[req.body.newPriceLookupKey.toUpperCase()],
+          price: req.body.priceId,
         }],
       }
     );
@@ -176,9 +195,27 @@ app.get('/subscriptions', async (req, res) => {
     status: 'all',
     expand: ['data.default_payment_method'],
   });
-
   res.json({subscriptions});
 });
+
+app.post('/setPaymentMethod', async (req, res) =>{
+  const customerId = req.cookies['customer'];
+  const paymentMethod = await stripe.paymentMethods.attach(
+      req.body.paymentMethod,
+      {customer: customerId}
+  );
+  const updateCustomerDefaultPaymentMethod = await stripe.customers.update(
+      customerId,{
+        invoice_settings: {
+          default_payment_method: req.body.paymentMethod,
+        },
+      }
+  );
+
+  const customer = await stripe.customers.retrieve(customerId);
+  console.log('customer',customer);
+  res.json({customer});
+})
 
 app.post(
   '/webhook',

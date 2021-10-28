@@ -9,9 +9,11 @@ import {
 import { Redirect } from 'react-router-dom';
 
 const Subscribe = ({location}) => {
-
+console.log(location);
   // Get the lookup key for the price from the previous page redirect.
   const [clientSecret] = useState(location.state.clientSecret);
+  // const [clientSecret] = useState('pk_test_51JgRsjIvyUj4aNtFVJJGvOyfMDVBfguCgHInMR9uOnssmUhWNd4FrvjmNhHJWWGBoM2xfnytOtMm75QLHX30Ruf500TgdXuBpk');
+
   const [subscriptionId] = useState(location.state.subscriptionId);
   const [name, setName] = useState('Jenny Rosen');
   const [messages, _setMessages] = useState('');
@@ -44,22 +46,32 @@ const Subscribe = ({location}) => {
     // to find your CardElement because there can only ever be one of
     // each type of element.
     const cardElement = elements.getElement(CardElement);
-
+    const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement,
+    });
+    const data = await fetch('/setPaymentMethod', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        paymentMethod: paymentMethod.id
+      }),
+    }).then(r => r.json());
+    console.log('customer',data);
     // Use card Element to tokenize payment details
     let { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: cardElement,
-        billing_details: {
-          name: name,
-        }
-      }
+      payment_method: paymentMethod.id
     });
-
     if(error) {
       // show error and collect new card details.
       setMessage(error.message);
       return;
     }
+    console.log('paymentMethod',paymentMethod);
+    console.log('paymentIntent',paymentIntent);
+
     setPaymentIntent(paymentIntent);
   }
 
