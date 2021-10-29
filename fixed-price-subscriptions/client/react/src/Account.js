@@ -25,7 +25,7 @@ const AccountSubscription = ({subscription}) => {
       </p>
 
       {/* <Link to={{pathname: '/change-plan', state: {subscription: subscription.id }}}>Change plan</Link><br /> */}
-      <Link to={{pathname: '/cancel', state: {subscription: subscription.id }}}>Cancel</Link>
+        {subscription.status==='active' && <Link to={{pathname: '/cancel', state: {subscription: subscription.id }}}>Cancel</Link>}
     </section>
   )
 }

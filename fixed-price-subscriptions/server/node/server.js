@@ -63,13 +63,13 @@ app.get('/', (req, res) => {
 
 app.get('/config', async (req, res) => {
   const prices = await stripe.prices.list({
-    // lookup_keys: ['sample_basic', 'sample_premium'],
-    // expand: ['data.product']
+    //lookup_keys: ['beginner', 'pro'],
+    //expand: ['data.product']
   });
 
   res.send({
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
-    prices: prices.data,
+    prices: prices?.data.filter(item=>item.lookup_key!=='fixed'),
   });
 });
 
@@ -80,8 +80,8 @@ app.post('/create-customer', async (req, res) => {
     email: req.body.email,
   });
 
-  if(customers.data.length>0){
-    customer = customers.data.find(item=>item.email===req.body.email);
+  if(customers?.data.length>0){
+    customer = customers?.data.find(item=>item.email===req.body.email);
   } else {
     customer = await stripe.customers.create({
       email: req.body.email,
@@ -102,19 +102,27 @@ app.post('/create-subscription', async (req, res) => {
   // Create the subscription
   const priceId = req.body.priceId;
 
+  const fixedPrices = await stripe.prices.list({
+    lookup_keys: ['fixed'],
+    expand: ['data.product']
+  });
+
   try {
+
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{
         price: priceId,
+      }, {
+        price: fixedPrices?.data[0].id
       }],
       payment_behavior: 'default_incomplete',
       expand: ['latest_invoice.payment_intent'],
     });
 
     res.send({
-      subscriptionId: subscription.id,
-      clientSecret: subscription.latest_invoice.payment_intent.client_secret,
+      subscriptionId: subscription?.id,
+      clientSecret: subscription?.latest_invoice.payment_intent.client_secret,
     });
   } catch (error) {
     return res.status(400).send({ error: { message: error.message } });
@@ -133,7 +141,7 @@ app.get('/invoice-preview', async (req, res) => {
     customer: customerId,
     subscription: req.query.subscriptionId,
     subscription_items: [ {
-      id: subscription.items.data[0].id,
+      id: subscription?.items.data[0].id,
       price: priceId,
     }],
   });
@@ -159,22 +167,26 @@ app.post('/update-subscription', async (req, res) => {
     const subscription = await stripe.subscriptions.retrieve(
       req.body.subscriptionId
     );
+    const newPrice = await stripe.prices.retrieve(
+        req.body.priceId
+    );
 
-    if(subscription.plan.id===req.body.priceId){
+    const fixedPrices = await stripe.prices.list({
+      lookup_keys: ['fixed'],
+    });
+    const updateItem = subscription?.items.data.find(item=>item.plan.id!==fixedPrices?.data[0].id)
+
+    if(updateItem.plan.id===req.body.priceId){
       return res.status(400).json({ error: 'is current' });
     }
 
-    // return res.send({ subscription: subscription });
-    // const deletedSubscription = await stripe.subscriptions.del(
-    //     req.body.subscriptionId
-    // );
     const updatedSubscription = await stripe.subscriptions.update(
       req.body.subscriptionId, {
           payment_behavior: 'pending_if_incomplete',
           proration_behavior: 'always_invoice',
         items: [{
-          id: subscription.items.data[0].id,
-          price: req.body.priceId,
+          id: updateItem.id,
+          price: newPrice?.id,
         }],
       }
     );
@@ -213,7 +225,7 @@ app.post('/setPaymentMethod', async (req, res) =>{
   );
 
   const customer = await stripe.customers.retrieve(customerId);
-  console.log('customer',customer);
+
   res.json({customer});
 })
 
@@ -227,9 +239,10 @@ app.post(
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
-        req.header('Stripe-Signature'),
+        req.headers['stripe-signature'],
         process.env.STRIPE_WEBHOOK_SECRET
       );
+
     } catch (err) {
       console.log(err);
       console.log(`⚠️  Webhook signature verification failed.`);
@@ -241,7 +254,7 @@ app.post(
 
     // Extract the object from the event.
     const dataObject = event.data.object;
-
+    console.log(dataObject?.id)
     // Handle the event
     // Review important events for Billing webhooks
     // https://stripe.com/docs/billing/webhooks
@@ -297,5 +310,56 @@ app.post(
     res.sendStatus(200);
   }
 );
+
+app.get('/createPrices', async (req,res)=>{
+  const product = await stripe.products.create({
+    name: 'Subscription', // your service name
+  });
+  const beginnerPrice = await stripe.prices.create({
+    unit_amount: 400,
+    currency: 'usd',
+    recurring: {interval: 'day'},
+    product: product?.id,
+    lookup_key: 'beginner',
+    transfer_lookup_key: true,
+    metadata:{
+      keywords: 100
+    }
+  });
+
+  const proPrice = await stripe.prices.create({
+    unit_amount: 800,
+    currency: 'usd',
+    recurring: {interval: 'day'},
+    product: product?.id,
+    lookup_key: 'pro',
+    transfer_lookup_key: true,
+    metadata:{
+      keywords: 200
+    }
+  });
+
+  const topPrice = await stripe.prices.create({
+    unit_amount: 1200,
+    currency: 'usd',
+    recurring: {interval: 'day'},
+    product: product?.id,
+    lookup_key: 'pro',
+    transfer_lookup_key: true,
+    metadata:{
+      keywords: 500
+    }
+  });
+  const fixedPrice = await stripe.prices.create({
+    unit_amount: 500,
+    currency: 'usd',
+    recurring: {interval: 'day'},
+    product: product?.id,
+    lookup_key: 'fixed',
+    transfer_lookup_key: true,
+  });
+
+  res.json({prices: [beginnerPrice,proPrice,topPrice],fixedPrice});
+})
 
 app.listen(4242, () => console.log(`Node server listening on port http://localhost:${4242}!`));

@@ -5,20 +5,41 @@ import { Redirect } from 'react-router-dom';
 const Prices = () => {
   const [prices, setPrices] = useState([]);
   const [subscriptionData, setSubscriptionData] = useState(null);
-  const [currentSubscription, setCurrentSubscription] = useState([]);
+  const [currentSubscription, setCurrentSubscription] = useState();
+  const [currentName, setCurrentName] = useState()
+
+  const fetchSubscriptions = async () => {
+    const {subscriptions} = await fetch('/subscriptions').then(r => r.json());
+    setCurrentSubscription(subscriptions.data.find(item=>item.status==='active'));
+    const activeSubscriptionItems = subscriptions.data.find(item=>item.status==='active')?.items?.data;
+    const metadata = activeSubscriptionItems?.find(item=>item.price.lookup_key!=='fixed');
+    setCurrentName(metadata ? metadata?.price?.metadata?.keywords : null);
+  };
 
   useEffect(() => {
     const fetchPrices = async () => {
       const {prices} = await fetch('/config').then(r => r.json());
       setPrices(prices);
     };
-    const fetchSubscriptions = async () => {
-      const {subscriptions} = await fetch('/subscriptions').then(r => r.json());
-      setCurrentSubscription(subscriptions.data.find(item=>item.status==='active'));
-    };
     fetchPrices();
     fetchSubscriptions();
   }, [])
+
+  const handleClick = async (e) =>{
+    e.preventDefault();
+
+    await fetch('/cancel-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriptionId: currentSubscription.id
+      }),
+    })
+    setCurrentSubscription(null);
+    setCurrentName(null);
+  }
 
   const createSubscription = async (priceId) => {
     if(currentSubscription){
@@ -32,7 +53,7 @@ const Prices = () => {
           priceId
         }),
       }).then(r => r.json());
-      console.log('update',subscription);
+      await fetchSubscriptions();
     } else {
       const {subscriptionId, clientSecret} = await fetch('/create-subscription', {
         method: 'POST',
@@ -77,7 +98,8 @@ const Prices = () => {
       </div>
       <p>current plan</p>
       <div>
-        <p >{currentSubscription?.plan?.nickname}</p>
+        <p >{currentName}</p>
+        {currentName && <button onClick={handleClick}>Cancel</button>}
       </div>
     </div>
   );
