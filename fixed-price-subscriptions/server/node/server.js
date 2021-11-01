@@ -123,6 +123,7 @@ app.post('/create-subscription', async (req, res) => {
     res.send({
       subscriptionId: subscription?.id,
       clientSecret: subscription?.latest_invoice.payment_intent.client_secret,
+      subscription,
     });
   } catch (error) {
     return res.status(400).send({ error: { message: error.message } });
@@ -254,6 +255,7 @@ app.post(
 
     // Extract the object from the event.
     const dataObject = event.data.object;
+    console.log(event?.type)
     console.log(dataObject?.id)
     // Handle the event
     // Review important events for Billing webhooks

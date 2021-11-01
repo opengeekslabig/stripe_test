@@ -62,7 +62,8 @@ console.log(location);
     console.log('customer',data);
     // Use card Element to tokenize payment details
     let { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: paymentMethod.id
+      payment_method: paymentMethod.id,
+      setup_future_usage: "off_session",
     });
     if(error) {
       // show error and collect new card details.
